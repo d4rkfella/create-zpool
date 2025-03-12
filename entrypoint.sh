@@ -1,6 +1,6 @@
 #!/bin/bash
-
 set -e
+set -x
 
 if [ -z "$TALOS_VERSION" ]; then
     echo "Error: TALOS_VERSION environment variable not set."
