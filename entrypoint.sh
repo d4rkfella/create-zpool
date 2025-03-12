@@ -1,6 +1,5 @@
-#!/bin/bash
-set -e
-set -x
+#!/usr/bin/env bash
+set -Eeuo pipefail
 
 if [ -z "$TALOS_VERSION" ]; then
     echo "Error: TALOS_VERSION environment variable not set."
