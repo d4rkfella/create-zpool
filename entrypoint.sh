@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+
 set -Eeuo pipefail  # Enables strict error handling
 
 # Ensure required environment variables are set
@@ -57,13 +58,19 @@ for device in "${devices[@]}"; do
     fi
 done
 
-# Function to check if device is already in a pool
+# Function to check if device is already in a pool and return pool name
 is_device_in_pool() {
     local device=$1
-    if zpool status | grep -q "$device"; then
-        return 0
+    local pool_name
+    # Use zpool status to find the pool associated with the device
+    pool_name=$(zpool status | grep -B 1 "$device" | grep "pool:" | awk '{print $2}')
+
+    # If pool_name is empty, the device is not part of any pool
+    if [ -z "$pool_name" ]; then
+        return 1  # Device not part of any ZFS pool
     else
-        return 1
+        echo "Device $device is part of pool: $pool_name"
+        return 0  # Device is part of a ZFS pool
     fi
 }
 
@@ -71,11 +78,21 @@ is_device_in_pool() {
 wipe_device() {
     local device=$1
     echo "Wiping device $device..."
+
+    # Check if the device is part of an existing ZFS pool
+    if is_device_in_pool "$device"; then
+        echo "Device $device is part of a ZFS pool. Destroying the pool."
+        local pool_name
+        pool_name=$(zpool status | grep -B 1 "$device" | grep "pool:" | awk '{print $2}')
+        zpool destroy "$pool_name"  # Destroy the pool
+    fi
+
+    # Now, wipe the device
     if wipefs -a "$device"; then
-        echo "Successfully wiped $device."
+        echo "Successfully wiped $device using wipefs."
     else
-        echo "Error: Failed to wipe $device."
-        exit 1
+        echo "Error: Failed to wipe $device using wipefs. Attempting to use dd."
+        dd if=/dev/zero of="$device" bs=1M status=progress  # Wipe with dd
     fi
 }
 
@@ -83,11 +100,13 @@ wipe_device() {
 if [ "$WIPE_DISKS" != "true" ]; then
     for device in "${devices[@]}"; do
         if is_device_in_pool "$device"; then
-            echo "Device $device is already part of an existing ZFS pool. Exiting gracefully."
-            exit 0
+            echo "Error: Device $device is part of a ZFS pool. WIPE_DISKS is not set to 'true'. Exiting."
+            exit 1  # Exit the script gracefully if WIPE_DISKS is false
         fi
     done
+    echo "WIPE_DISKS is set to 'false'. Skipping disk wipe for devices."
 else
+    # Proceed with wiping devices if WIPE_DISKS is true
     for device in "${devices[@]}"; do
         wipe_device "$device"
     done
@@ -123,4 +142,3 @@ create_zpool_mirror() {
 }
 
 create_zpool_mirror
-sleep infinity
