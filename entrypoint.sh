@@ -53,6 +53,22 @@ for device in $DEVICES; do
     fi
 done
 
+is_device_in_pool() {
+    local device=$1
+    if zpool status | grep -q "$device"; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+for device in $DEVICES; do
+    if is_device_in_pool "$device"; then
+        echo "Error: Device $device is already part of an existing ZFS pool."
+        exit 1
+    fi
+done
+
 create_zpool_mirror() {
     local devices=($DEVICES)
     local ashift=$ASHIFT
