@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
+set -Eeuo pipefail  # Enables strict error handling
 
-if [ -z "$TALOS_VERSION" ]; then
+# Ensure required environment variables are set
+if [ -z "${TALOS_VERSION:-}" ]; then
     echo "Error: TALOS_VERSION environment variable not set."
     exit 1
 fi
@@ -28,31 +30,34 @@ fi
 
 echo "ZFS tools installed successfully!"
 
-if [ -z "$DEVICES" ]; then
+# Ensure required variables for ZFS setup
+if [ -z "${DEVICES:-}" ]; then
     echo "Error: DEVICES environment variable not set."
-    echo "Example:"
-    echo "  export DEVICES=\"/dev/sda /dev/sdb /dev/sdc /dev/sdd\""
+    echo "Example: export DEVICES=\"/dev/sda /dev/sdb /dev/sdc /dev/sdd\""
     exit 1
 fi
 
-if [ -z "$ASHIFT" ]; then
+if [ -z "${ASHIFT:-}" ]; then
     echo "Error: ASHIFT environment variable not set."
-    echo "Example:"
-    echo "  export ASHIFT=12"
+    echo "Example: export ASHIFT=12"
     exit 1
 fi
 
 : "${POOL_NAME:=zfspool}"
-
 : "${WIPE_DISKS:=false}"
 
-for device in $DEVICES; do
+# Convert DEVICES string to an array
+read -ra devices <<< "$DEVICES"
+
+# Check if all devices exist
+for device in "${devices[@]}"; do
     if [ ! -e "$device" ]; then
         echo "Error: Device $device does not exist."
         exit 1
     fi
 done
 
+# Function to check if device is already in a pool
 is_device_in_pool() {
     local device=$1
     if zpool status | grep -q "$device"; then
@@ -62,6 +67,7 @@ is_device_in_pool() {
     fi
 }
 
+# Function to wipe devices
 wipe_device() {
     local device=$1
     echo "Wiping device $device..."
@@ -73,39 +79,41 @@ wipe_device() {
     fi
 }
 
+# Check if we should wipe disks or if devices are already in a pool
 if [ "$WIPE_DISKS" != "true" ]; then
-    for device in $DEVICES; do
+    for device in "${devices[@]}"; do
         if is_device_in_pool "$device"; then
             echo "Device $device is already part of an existing ZFS pool. Exiting gracefully."
             exit 0
         fi
     done
 else
-    for device in $DEVICES; do
+    for device in "${devices[@]}"; do
         wipe_device "$device"
     done
 fi
 
+# Function to create a mirrored ZFS pool
 create_zpool_mirror() {
-    local devices=($DEVICES)
-    local ashift=$ASHIFT
-    local pool_name=$POOL_NAME
+    local ashift="$ASHIFT"
+    local pool_name="$POOL_NAME"
+    local -a zpool_cmd=("zpool" "create" "-o" "ashift=$ashift" "-f" "$pool_name")
 
+    # Ensure an even number of devices for mirrors
     if [ $(( ${#devices[@]} % 2 )) -ne 0 ]; then
         echo "Error: The number of devices must be even (each mirror requires 2 devices)."
         exit 1
     fi
 
-    local zpool_cmd="zpool create -o ashift=$ashift -f $pool_name"
-
+    # Construct ZFS mirror command
     for (( i=0; i<${#devices[@]}; i+=2 )); do
-        zpool_cmd+=" mirror ${devices[i]} ${devices[i+1]}"
+        zpool_cmd+=("mirror" "${devices[i]}" "${devices[i+1]}")
     done
 
     echo "Creating ZFS pool with the following command:"
-    echo "$zpool_cmd"
+    echo "${zpool_cmd[@]}"
 
-    if ! eval "$zpool_cmd"; then
+    if ! "${zpool_cmd[@]}"; then
         echo "Error: Failed to create ZFS pool."
         exit 1
     fi
