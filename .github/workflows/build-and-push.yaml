@@ -1,0 +1,43 @@
+name: Build and Push Docker Image to GitHub Packages
+
+on:
+  push:
+    branches:
+      - develop  
+    tags:
+      - 'v*.*.*'  
+  workflow_dispatch:
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+      
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Extract version for tags
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "VERSION=${VERSION}" >> $GITHUB_ENV
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ github.ref == 'refs/heads/develop' && 'ghcr.io/d4rkfella/create-zpool:develop' || '' }}
+            ${{ startsWith(github.ref, 'refs/tags/v') && format('ghcr.io/d4rkfella/create-zpool:{0}', env.VERSION) || '' }}
+            ${{ startsWith(github.ref, 'refs/tags/v') && 'ghcr.io/d4rkfella/create-zpool:latest' || '' }}
