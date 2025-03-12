@@ -123,3 +123,4 @@ create_zpool_mirror() {
 }
 
 create_zpool_mirror
+sleep infinity
