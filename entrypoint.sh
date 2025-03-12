@@ -46,6 +46,8 @@ fi
 
 : "${POOL_NAME:=zfspool}"
 
+: "${WIPE_DISKS:=false}"
+
 for device in $DEVICES; do
     if [ ! -e "$device" ]; then
         echo "Error: Device $device does not exist."
@@ -62,12 +64,29 @@ is_device_in_pool() {
     fi
 }
 
-for device in $DEVICES; do
-    if is_device_in_pool "$device"; then
-        echo "Error: Device $device is already part of an existing ZFS pool."
+wipe_device() {
+    local device=$1
+    echo "Wiping device $device..."
+    if wipefs -a "$device"; then
+        echo "Successfully wiped $device."
+    else
+        echo "Error: Failed to wipe $device."
         exit 1
     fi
-done
+}
+
+if [ "$WIPE_DISKS" != "true" ]; then
+    for device in $DEVICES; do
+        if is_device_in_pool "$device"; then
+            echo "Device $device is already part of an existing ZFS pool. Exiting gracefully."
+            exit 0
+        fi
+    done
+else
+    for device in $DEVICES; do
+        wipe_device "$device"
+    done
+fi
 
 create_zpool_mirror() {
     local devices=($DEVICES)
