@@ -56,7 +56,7 @@ done
 create_zpool_mirror() {
     local ashift="$ASHIFT"
     local pool_name="$POOL_NAME"
-    local -a zpool_cmd=("zpool" "create" "-o" "ashift=$ashift" "-f" "$pool_name")
+    local -a zpool_cmd=("zpool" "create" "-m" "legacy" "-o" "ashift=$ashift" "-f" "$pool_name")
 
     if [ $(( ${#devices[@]} % 2 )) -ne 0 ]; then
         echo "Error: The number of devices must be even (each mirror requires 2 devices)."
